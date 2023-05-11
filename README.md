@@ -1,4 +1,4 @@
 # LU-Cholesky-QR
-- Compare the time comsued using different methods(QR, Cholesky, and LU decomposition) when it comes to solve the linear eqaution.
-- Derive the "best" solution to Ridge Function's penalized least squared criterion
-- Apply parallel computing to optimize.
+- Evaluate and compare the time consumption of different methods (QR, Cholesky, and LU decomposition) for solving linear equations.
+- Identify the "optimal" solution for the penalized least squares criterion in Ridge Regression.
+- Implement parallel computing strategies for performance optimization.
