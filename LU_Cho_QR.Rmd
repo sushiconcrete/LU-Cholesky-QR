@@ -1,0 +1,142 @@
+# 1. Read Data
+
+```{r}
+data(longley)
+y <- as.matrix(longley$Employed)
+df <- longley[, -which(names(longley) == "Employed")]
+X <- as.matrix(cbind(1, df))  # Add intercept (ones) as the first column
+X
+```
+
+# 2. Compute Models and Time Consumed
+
+We find that LU decomposition is the fastest method comparing to others, Cholesky decomposition method is the second.
+
+#### LU Decomposition
+
+```{r}
+start_time <- Sys.time()
+beta_hat <- solve(t(X) %*% X) %*% t(X) %*% y  # Compute beta_hat
+residuals <- y - X %*% beta_hat
+n <- nrow(X)
+p <- ncol(X)
+sigma_hat_sq <- t(residuals) %*% residuals / (n - p)  # Compute sigma_hat_sq
+var_beta_hat <- as.numeric(sigma_hat_sq) * solve(t(X) %*% X)  # Compute variance of beta_hat
+se_beta_hat <- sqrt(diag(var_beta_hat))  # Compute SE of beta_hat
+end_time <- Sys.time()
+time_GE_LU <- end_time - start_time
+time_GE_LU
+```
+
+#### Cholesky decomposition
+
+```{r}
+start_time <- Sys.time()
+XtX <- t(X) %*% X
+XtX_inv <- chol2inv(chol(XtX))
+beta_hat_chol <- XtX_inv %*% t(X) %*% y
+residuals_chol <- y - X %*% beta_hat_chol
+sigma_hat_sq_chol <- t(residuals_chol) %*% residuals_chol / (n - p)
+var_beta_hat_chol <- as.numeric(sigma_hat_sq_chol) * XtX_inv
+se_beta_hat_chol <- sqrt(diag(var_beta_hat_chol)) 
+end_time <- Sys.time()
+time_Cholesky <- end_time - start_time
+time_Cholesky
+```
+
+#### QR decomposition
+
+```{r}
+start_time <- Sys.time()
+qr_decomp <- qr(X)  # QR decomposition of X
+R_inv <- solve(qr.R(qr_decomp))  # Inverse of R
+Q <- qr.Q(qr_decomp)  # Q matrix
+
+beta_hat_qr <- R_inv %*% t(Q) %*% y  # Compute beta_hat
+
+residuals_qr <- y - X %*% beta_hat_qr
+sigma_hat_sq_qr <- t(residuals_qr) %*% residuals_qr / (n - p)  # Compute sigma_hat_sq
+
+var_beta_hat_qr <- as.numeric(sigma_hat_sq_qr) * R_inv %*% t(R_inv)  # Compute variance of beta_hat
+se_beta_hat_qr <- sqrt(diag(var_beta_hat_qr))  # Compute SE of beta_hat
+end_time <- Sys.time()
+time_QR <- end_time - start_time
+time_QR
+```
+
+#### Check the results
+
+```{r}
+model <- lm(Employed ~ ., data = longley)
+summary(model)
+beta_hat
+beta_hat_chol
+beta_hat_qr
+```
+
+# 3. Prove The Ridge Solotion
+
+$J(\beta) = (1/2)||y-X\beta||^2 + (λ/2)||\beta||^2$
+
+$\frac {\partial J(B)}{\partial \beta} = -X^T(y-X \beta) + \lambda \beta = 0$
+
+$-X^Ty+X^TX \beta + \lambda \beta = 0$
+
+$(X^TX + \lambda I) \beta = X^T y$
+
+$\hat{\beta} = (X^TX + \lambda I)^{-1} X ^Ty$
+
+# 4. Plot 2-norm of Ridge Function
+
+```{r}
+lambda_values <- seq(0, 100, by = 50)
+norms <- numeric(length(lambda_values))
+for (i in seq_along(lambda_values)) {
+  lambda <- lambda_values[i]
+  beta_hat_ridge <- solve(t(X) %*% X + lambda * diag(p), t(X) %*% y)
+  norms[i] <- sqrt(sum(beta_hat_ridge^2))
+}
+plot(lambda_values, norms, type = "l", xlab = "Lambda", ylab = "L2-Norm of Ridge Coefficients", ylim = c(0,8000))
+
+```
+
+# Using Parallel Computing
+
+```{r}
+# load the parallel package
+library(parallel)
+
+lambda_values <- seq(0, 100, by = 50)
+p <- ncol(X)
+
+# create a function to calculate beta_hat_ridge and its norm
+calc_norm <- function(lambda) {
+  beta_hat_ridge <- solve(t(X) %*% X + lambda * diag(p), t(X) %*% y)
+  norm <- sqrt(sum(beta_hat_ridge^2))
+  return(norm)
+}
+
+# use mclapply to calculate norms in parallel
+norms <- mclapply(lambda_values, calc_norm, mc.cores = detectCores())
+
+# since mclapply returns a list, unlist norms to a numeric vector
+norms <- unlist(norms)
+
+# plot the results
+plot(lambda_values, norms, type = "l", xlab = "Lambda", ylab = "L2-Norm of Ridge Coefficients", ylim = c(0,8000))
+
+```
+
+# Find out which method is the lm() function in R is using? And which algorithm is being used?
+
+QR decomposition is the method that lm() function in R is using.
+
+QR algorithm factor a matrix into a product of an orthogonal matrix Q and a upper triangular matrix R, and use them to solve the linear equation,
+
+$X \beta = y$
+
+$R \beta = Q^Ty$
+
+, by solving the second equation, we found that it's easier to compute than the first one.
+
+But it's not always this case, R actually will choose the method that will depends on the circumstance. Sometimes, SVD method will be used to approach numeric stability, but it's more computationally expensive.
